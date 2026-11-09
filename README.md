@@ -19,6 +19,14 @@ openEuler 软件包默认使用南京大学镜像，保留 GPG 签名校验；�
 
 安装日志位于 `logs/`，下载缓存位于 `.downloads/`，均不提交 Git。安装脚本可重新执行；遇到失败会停止，不会将失败环境提交为镜像。
 
+若环境安装和验证已经完成，但保存镜像时 Docker 服务中断，先恢复 Docker Desktop，再执行以下命令，仅验证已有容器、保存镜像并验证新镜像：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File G:\GardenerOS\setup.ps1 -SaveOnly
+```
+
+保存镜像使用 `--pause=false`，执行时请保持实验容器空闲。
+
 ## 日常访问
 
 ```powershell

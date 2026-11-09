@@ -3,7 +3,8 @@ param(
     [string]$ContainerName = 'gardeneros-dev',
     [string]$ImageName = 'myopeneuler',
     [string]$Author = '',
-    [int]$BuildJobs = 4
+    [int]$BuildJobs = 4,
+    [switch]$SaveOnly
 )
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
@@ -37,24 +38,28 @@ if ($existing) {
     if ($matches.Count -ne 1) { throw 'Existing container uses a different /mnt mount; choose another ContainerName.' }
     Invoke-Docker start $ContainerName
 } else {
+    if ($SaveOnly) { throw 'The configured container does not exist; run full setup first.' }
     Invoke-Docker run -dit --name $ContainerName --mount "type=bind,source=$PSScriptRoot,destination=/mnt" --workdir /mnt openeuler/openeuler bash
 }
-New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'logs') -Force | Out-Null
-$logPath = Join-Path $PSScriptRoot ('logs/setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
-$previousPreference = $ErrorActionPreference
-try {
-    # Windows PowerShell 5 treats native stderr as errors, including curl progress.
-    $ErrorActionPreference = 'Continue'
-    & $dockerExe exec -e "BUILD_JOBS=$BuildJobs" $ContainerName bash -c 'exec bash /mnt/setup-container.sh 2>&1' 2>&1 | Tee-Object -FilePath $logPath
-    $setupExitCode = $LASTEXITCODE
-} finally {
-    $ErrorActionPreference = $previousPreference
+if (!$SaveOnly) {
+    New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'logs') -Force | Out-Null
+    $logPath = Join-Path $PSScriptRoot ('logs/setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Merge installer stderr inside the container for Windows PowerShell 5.
+        $ErrorActionPreference = 'Continue'
+        & $dockerExe exec -e "BUILD_JOBS=$BuildJobs" $ContainerName bash -c 'exec bash /mnt/setup-container.sh 2>&1' 2>&1 | Tee-Object -FilePath $logPath
+        $setupExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($setupExitCode -ne 0) { throw "Environment setup failed. See $logPath" }
 }
-if ($setupExitCode -ne 0) { throw "Environment setup failed. See $logPath" }
 Invoke-Docker exec $ContainerName bash /mnt/verify-container.sh
-$commitArgs = @('commit', '-m', 'New configured environment')
+$commitArgs = @('commit', '--pause=false', '-m', 'New configured environment')
 if ($Author) { $commitArgs += @('-a', $Author) }
 $commitArgs += @($ContainerName, $ImageName)
 Invoke-Docker @commitArgs
+Invoke-Docker run --rm --mount "type=bind,source=$PSScriptRoot,destination=/mnt" --workdir /mnt $ImageName bash /mnt/verify-container.sh
 Write-Host "Image created: $ImageName"
 Write-Host "Enter container: docker exec -it $ContainerName bash"

@@ -51,6 +51,36 @@ docker desktop status
 
 如果 `docker commit` 报 `502` 或引擎假死，优先检查磁盘空间（镜像约需 7 GB 可用空间）与 `--no-pause` 是否生效；提交期间容器应保持空闲。
 
+## 故障恢复：登录跳转失败
+
+现象：Docker Desktop 里点 Sign in，浏览器打开 `login.docker.com`，授权后停在
+
+> You're almost done! We're redirecting you to the desktop app.
+
+点「Proceed to Docker Desktop」没有任何反应，应用里依旧是 Not logged in。
+
+原因：浏览器完成 OAuth 后要靠 `docker-desktop://` 协议把 code 交回桌面端，而本机 `HKCU\Software\Classes\docker-desktop` 没有注册（静默/按用户安装时可能被跳过），点击就被系统丢弃。修复：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File G:\GardenerOS\fix-docker-signin.ps1 -Verify
+```
+
+脚本登记协议 `"<安装目录>\Docker Desktop.exe" "%1"`，随后用 `docker-desktop://dashboard/open` 触发一次，后端日志出现 `show-dashboard flag detected` 即说明 URL 已被应用解析。注册后回到 Docker Desktop 重新点 Sign in 即可走完流程；`-Unregister` 可撤销。
+
+自检命令（不依赖脚本）：
+
+```powershell
+Get-ItemProperty 'HKCU:\Software\Classes\docker-desktop\shell\open\command'
+Start-Process 'docker-desktop://dashboard/open'
+Select-String "$env:LOCALAPPDATA\Docker\log\host\com.docker.backend.exe.log" -Pattern 'show-dashboard flag detected' | Select-Object -Last 1
+```
+
+补充两点：
+
+- 本实验不需要 Docker Hub 账号，`myopeneuler` 是本地镜像，`docker pull openeuler/openeuler` 也是匿名拉取，登录失败不影响任何实验步骤。
+- 若确实要推送镜像，可以绕过浏览器用 PAT 登录：`docker login -u <用户名>`，密码处粘贴 Personal Access Token。
+
+
 
 ## 日常访问
 

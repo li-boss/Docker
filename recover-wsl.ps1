@@ -1,18 +1,19 @@
 #Requires -RunAsAdministrator
 <#
-    WSL 无响应恢复脚本（Windows / Docker Desktop）
+    WSL recovery for Docker Desktop on Windows (ASCII-only on purpose:
+    Windows PowerShell 5.1 mis-parses BOM-less UTF-8 scripts).
 
-    症状：
-      - `wsl -l -v`、`wsl --shutdown` 长时间无输出并超时；
-      - Docker Desktop 弹出 “WSL is unresponsive”；
-      - 后端日志出现 DockerDesktop/Wsl/CommandTimedOut。
+    Symptoms
+      - `wsl -l -v` and `wsl --shutdown` hang with no output and time out
+      - Docker Desktop shows "WSL is unresponsive"
+      - backend log repeats DockerDesktop/Wsl/CommandTimedOut
 
-    用法（必须提权；普通窗口执行会直接退出）：
+    What it does: force-kills the wedged WSL service and VM processes, restarts
+    WSLService, then probes the distro list with a timeout. It never touches
+    docker_data.vhdx or any distro data.
+
+    Usage
       powershell -ExecutionPolicy Bypass -File G:\GardenerOS\recover-wsl.ps1
-      或 start powershell -Verb RunAs ...
-
-    脚本只做三件事：强杀卡死的 WSL 服务与 VM 进程、重新启动服务、带超时探测发行版列表。
-    它不改动任何发行版数据，也不删除 docker_data.vhdx。
 #>
 [CmdletBinding()]
 param(
@@ -21,8 +22,6 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
-$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $PSScriptRoot) { $LogPath = Join-Path $ScriptDir 'logs\wsl-recovery.log' }
 New-Item -ItemType Directory -Path (Split-Path -Parent $LogPath) -Force | Out-Null
 
 function Write-Log {
@@ -50,10 +49,10 @@ function Invoke-Timed {
         Write-Log ("TIMEOUT after {0}s: {1} {2}" -f $TimeoutSeconds, $FilePath, ($Arguments -join ' '))
     }
     if (Test-Path -LiteralPath $stdout) {
-        Get-Content -LiteralPath $stdout | Where-Object { $_ -ne '' } | ForEach-Object { Write-Log ("out: " + $_) }
+        Get-Content -LiteralPath $stdout | Where-Object { $_ -ne '' } | ForEach-Object { Write-Log ('out: ' + $_) }
     }
     if (Test-Path -LiteralPath $stderr) {
-        Get-Content -LiteralPath $stderr | Where-Object { $_ -ne '' } | ForEach-Object { Write-Log ("err: " + $_) }
+        Get-Content -LiteralPath $stderr | Where-Object { $_ -ne '' } | ForEach-Object { Write-Log ('err: ' + $_) }
     }
     Remove-Item -LiteralPath $stdout, $stderr -ErrorAction SilentlyContinue
     return $finished
@@ -61,34 +60,34 @@ function Invoke-Timed {
 
 Write-Log '--- WSL recovery start ---'
 if (-not (Test-Elevated)) {
-    Write-Log 'ABORT：需要管理员权限。请以管理员身份重新运行本脚本。'
+    Write-Log 'ABORT: administrator rights required. Rerun from an elevated prompt.'
     exit 2
 }
 
-Write-Log '1/4 停止 WSLService 并强杀卡死的 WSL 进程'
-& "$env:SystemRoot\System32\sc.exe" stop WSLService | ForEach-Object { Write-Log ("sc stop: " + $_) }
+Write-Log '1/4 stop WSLService and force-kill wedged WSL processes'
+& "$env:SystemRoot\System32\sc.exe" stop WSLService | ForEach-Object { Write-Log ('sc stop: ' + $_) }
 Start-Sleep -Seconds 2
 Get-Process -Name wslservice, vmmemWSL, wslhost, wslrelay, wsl -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Log ("killing {0} pid={1}" -f $_.Name, $_.Id)
-    & "$env:SystemRoot\System32\taskkill.exe" /F /PID $_.Id /T 2>&1 | ForEach-Object { Write-Log ("taskkill: " + $_) }
+    & "$env:SystemRoot\System32\taskkill.exe" /F /PID $_.Id /T 2>&1 | ForEach-Object { Write-Log ('taskkill: ' + $_) }
 }
 Start-Sleep -Seconds 4
 
-Write-Log '2/4 启动 WSLService'
-& "$env:SystemRoot\System32\sc.exe" start WSLService | ForEach-Object { Write-Log ("sc start: " + $_) }
+Write-Log '2/4 start WSLService'
+& "$env:SystemRoot\System32\sc.exe" start WSLService | ForEach-Object { Write-Log ('sc start: ' + $_) }
 Start-Sleep -Seconds 5
-Write-Log ("WSLService 状态: " + (Get-Service -Name WSLService).Status)
+Write-Log ('WSLService status: ' + (Get-Service -Name WSLService).Status)
 
-Write-Log '3/4 关闭残留 WSL 虚拟机'
+Write-Log '3/4 shut down leftover WSL virtual machine'
 [void](Invoke-Timed -FilePath "$env:SystemRoot\System32\wsl.exe" -Arguments @('--shutdown') -TimeoutSeconds $ProbeTimeoutSeconds)
 Start-Sleep -Seconds 3
 
-Write-Log '4/4 探测发行版列表'
+Write-Log '4/4 probe distro list'
 $probeOk = Invoke-Timed -FilePath "$env:SystemRoot\System32\wsl.exe" -Arguments @('-l', '-v') -TimeoutSeconds $ProbeTimeoutSeconds
 
 if ($probeOk) {
-    Write-Log 'WSL 已恢复。若 docker-desktop 发行版未列出，执行：docker desktop start'
+    Write-Log 'WSL is responsive again. If docker-desktop is missing from the list, run: docker desktop start'
 } else {
-    Write-Log 'WSL 仍未响应：请重启 Windows 后再运行 docker desktop start'
+    Write-Log 'WSL still unresponsive: reboot Windows, then run: docker desktop start'
 }
 Write-Log '--- WSL recovery done ---'

@@ -43,3 +43,28 @@ qemu-riscv64 version 11.0.0
 3. `powershell -ExecutionPolicy Bypass -File G:\GardenerOS\setup.ps1 -SaveOnly -Author "Di Zhang"`：验证容器、提交镜像、再用新镜像起临时容器验证。
 
 注意：`G:\GardenerOS-DockerData` 存放 Docker 的 `docker_data.vhdx`（约 8.4 GB），不要删除或移动到网络盘。
+
+## 程序目录迁移（C 盘 → G 盘）
+
+Docker Desktop 的可执行文件原先装在 `C:\Users\Lenovo\AppData\Local\Programs\DockerDesktop`（3.22 GB / 171 个文件），已整体迁移到：
+
+```
+G:\Docker\DockerDesktop
+```
+
+原路径改为目录联接（junction），因此注册表、快捷方式、`docker-desktop://` 协议、WSL 集成和 Docker 自身的原地更新都继续走同一路径字符串：
+
+```powershell
+Get-Item "$env:LOCALAPPDATA\Programs\DockerDesktop" -Force | Select-Object LinkType,Target
+# C:\Users\Lenovo\AppData\Local\Programs\DockerDesktop -> G:\Docker\DockerDesktop
+```
+
+迁移后验证：引擎 29.9.2 正常启动，`gardeneros-dev` 容器与 `myopeneuler`（`9985c4f7e0de`）、`openeuler/openeuler` 镜像均在，容器内 `rustc 1.97.0-nightly`、`QEMU 11.0.0` 复验通过，C 盘可用空间 30.7 → 33.2 GB。数据盘、WSL 发行版、宿主机仓库目录均未移动。
+
+后续若 Docker Desktop 自动更新后 C 盘又出现实体程序目录（更新器可能重建目录、丢弃联接），重跑一次迁移即可，脚本幂等：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File G:\GardenerOS\relocate-docker-desktop.ps1
+powershell -ExecutionPolicy Bypass -File G:\GardenerOS\relocate-docker-desktop.ps1 -Restore   # 需要时搬回 C 盘
+```
+

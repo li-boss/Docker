@@ -18,6 +18,7 @@ if ($dockerCommand) {
     ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
     if (!$dockerExe) { throw 'Install and start Docker Desktop before running setup.ps1.' }
 }
+$env:PATH = (Split-Path -Parent $dockerExe) + [IO.Path]::PathSeparator + $env:PATH
 function Invoke-Docker {
     & $dockerExe @args
     if ($LASTEXITCODE -ne 0) { throw "Docker command failed with exit code $LASTEXITCODE" }
@@ -40,8 +41,16 @@ if ($existing) {
 }
 New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'logs') -Force | Out-Null
 $logPath = Join-Path $PSScriptRoot ('logs/setup-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
-& $dockerExe exec -e "BUILD_JOBS=$BuildJobs" $ContainerName bash /mnt/setup-container.sh 2>&1 | Tee-Object -FilePath $logPath
-if ($LASTEXITCODE -ne 0) { throw "Environment setup failed. See $logPath" }
+$previousPreference = $ErrorActionPreference
+try {
+    # Windows PowerShell 5 treats native stderr as errors, including curl progress.
+    $ErrorActionPreference = 'Continue'
+    & $dockerExe exec -e "BUILD_JOBS=$BuildJobs" $ContainerName bash -c 'exec bash /mnt/setup-container.sh 2>&1' 2>&1 | Tee-Object -FilePath $logPath
+    $setupExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $previousPreference
+}
+if ($setupExitCode -ne 0) { throw "Environment setup failed. See $logPath" }
 Invoke-Docker exec $ContainerName bash /mnt/verify-container.sh
 $commitArgs = @('commit', '-m', 'New configured environment')
 if ($Author) { $commitArgs += @('-a', $Author) }

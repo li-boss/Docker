@@ -15,6 +15,8 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 
 Cargo 镜像按提供的实际 URL 使用 USTC（科大），使用官方当前支持的 sparse 协议；原说明中的“tuna”与给出的科大 URL 不一致。
 
+openEuler 软件包默认使用南京大学镜像，保留 GPG 签名校验；原仓库配置有备份，更换镜像时复用已有下载缓存。可通过容器中的 `OPENEULER_MIRROR` 环境变量指定其他 HTTPS 镜像根地址。
+
 安装日志位于 `logs/`，下载缓存位于 `.downloads/`，均不提交 Git。安装脚本可重新执行；遇到失败会停止，不会将失败环境提交为镜像。
 
 ## 日常访问

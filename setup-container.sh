@@ -3,8 +3,10 @@ set -Eeuo pipefail
 trap 'echo "Setup failed at line $LINENO" >&2' ERR
 [[ $(id -u) == 0 ]] || { echo 'Run as container root.' >&2; exit 1; }
 cd /root
-dnf -y groupinstall 'Development Tools'
-dnf -y install ca-certificates curl vim git gcc gcc-c++ autoconf automake kernel-devel \
+python3 /mnt/configure-repos.py
+dnf_options=(-y --setopt=max_parallel_downloads=8 --setopt=retries=6 --setopt=timeout=60 --disablerepo=debuginfo,source,update-source)
+dnf "${dnf_options[@]}" groupinstall 'Development Tools'
+dnf "${dnf_options[@]}" install ca-certificates curl vim git gcc gcc-c++ autoconf automake kernel-devel \
   libmpc-devel mpfr-devel gmp-devel glib2 glib2-devel make cmake gawk bison flex \
   texinfo gperf libtool patchutils bc python3 python3-pip ninja-build wget xz \
   python3-tomli python3-sphinx pkgconf-pkg-config zlib-devel
@@ -40,6 +42,9 @@ cargo +nightly-2026-05-08 install cargo-binutils --locked
 if ! command -v qemu-system-riscv64 >/dev/null || ! qemu-system-riscv64 --version | head -n 1 | grep -q 'version 11.0.0'; then
   mkdir -p /root/src
   cd /root/src
+  if [[ ! -f qemu-11.0.0.tar.xz && -f /mnt/.downloads/qemu-11.0.0.tar.xz ]]; then
+    cp /mnt/.downloads/qemu-11.0.0.tar.xz .
+  fi
   if [[ ! -f qemu-11.0.0.tar.xz ]]; then
     curl --fail --location --retry 3 https://download.qemu.org/qemu-11.0.0.tar.xz -o qemu-11.0.0.tar.xz.part
     mv qemu-11.0.0.tar.xz.part qemu-11.0.0.tar.xz

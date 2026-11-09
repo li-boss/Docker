@@ -1,0 +1,10 @@
+/target/
+/.downloads/
+/logs/
+*.tar.xz
+*.tar.gz
+*.qcow2
+*.img
+.env
+.env.*
+!.env.example

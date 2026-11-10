@@ -4,6 +4,16 @@ Windows 实验目录：`G:\GardenerOS`；容器中的对应目录：`/mnt`。
 
 当前状态：环境已配置完成，镜像 `myopeneuler:latest`（`9985c4f7e0de`，Author `Di Zhang`）已保存并通过新容器复验，明细见 [SETUP-STATUS.md](SETUP-STATUS.md)。
 
+## 一键核验（实验 0 自检）
+
+对着实验 0 的配置文档做逐条自检，输出 14 个编号检查项，每项给出 PASS/FAIL，适合整屏截图交作业：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File G:\GardenerOS\verify-lab0.ps1
+```
+
+检查内容：引擎可用、`openeuler/openeuler` 已拉取、容器运行中、`/mnt` 绑定挂载、`rust-toolchain` 固定版本、nightly 与默认工具链、rustc/cargo 版本、RISC-V target 与 llvm-tools/rust-src、cargo-binutils、cargo 镜像、`.bashrc` 镜像变量、`curl/vim-enhanced/gcc` 与 Development Tools、QEMU 11.0.0、`myopeneuler` 镜像作者。全部通过时最后一行为 `RESULT: 14 passed, 0 failed`。
+
 ## 配置环境
 
 安装并启动 Docker Desktop，确保使用 Linux containers，然后在 PowerShell 执行：
